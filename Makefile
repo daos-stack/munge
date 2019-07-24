@@ -47,4 +47,4 @@ show_rpms:
 show_targets:
 	@echo $(TARGETS)
 
-.PHONY: srpm rpms ks show_targets
+.PHONY: srpm rpms ls show_targets

@@ -50,7 +50,7 @@ pipeline {
                 cancelPreviousBuilds()
             }
         }
-       stage('Build') {
+        stage('Build') {
             parallel {
                 stage('Build on SLES 12.3') {
                     when { beforeAgent true
@@ -59,6 +59,7 @@ pipeline {
                         dockerfile {
                             filename 'Dockerfile.sles.12.3'
                             label 'docker_runner'
+                            args '--privileged=true'
                             additionalBuildArgs '--build-arg UID=$(id -u)' +
                                                 ' --build-arg CACHEBUST=' +
                                                 currentBuild.startTimeInMillis
@@ -67,13 +68,33 @@ pipeline {
                     steps {
                         sh '''rm -rf artifacts/sles12.3/
                               mkdir -p artifacts/sles12.3/
-                              rm -rf _topdir/SRPMS _topdir/RPMS
-                              make rpms
-                              ln _topdir/{RPMS/*,SRPMS}/* artifacts/sles12.3/
-                              createrepo artifacts/sles12.3/'''
+                              make srpm
+                              cd _topdir/SOURCES; sudo build \
+                                --repo http://cobbler/cobbler/ks_mirror/SLES-12.3-x86_64/suse \
+                                --repo http://cobbler/cobbler/repo_mirror/sdk-sles12.3-x86_64 \
+                                --repo http://cobbler/cobbler/repo_mirror/updates-sles12.3-x86_64 \
+                                --repo http://cobbler/cobbler/repo_mirror/sdkupdate-sles12.3-x86_64 \
+                                --dist sles12.3'''
                     }
                     post {
-                        always {
+                        success {
+                            sh '''(cd /var/tmp/build-root/home/abuild/rpmbuild/ &&
+                                   cp {RPMS/*,SRPMS}/* $OLDPWD/artifacts/sles12.3/)
+                                  createrepo artifacts/sles12.3/'''
+                        }
+                        unsuccessful {
+                            sh '''(cd /var/tmp/build-root/home/abuild/rpmbuild/BUILD &&
+                                   find . -name configure -printf %h\\\\n | \
+                                   while read dir; do
+                                       if [ ! -f $dir/config.log ]; then
+                                           continue
+                                       fi
+                                       tdir="$OLDPWD/artifacts/sles12.3/autoconf-logs/$dir"
+                                       mkdir -p $tdir
+                                       cp -a $dir/config.log $tdir/
+                                   done)'''
+                        }
+                        cleanup {
                             archiveArtifacts artifacts: 'artifacts/sles12.3/**'
                         }
                     }
@@ -83,6 +104,7 @@ pipeline {
                         dockerfile {
                             filename 'Dockerfile.leap.42.3'
                             label 'docker_runner'
+                            args '--privileged=true'
                             additionalBuildArgs '--build-arg UID=$(id -u)' +
                                                 ' --build-arg CACHEBUST=' +
                                                 currentBuild.startTimeInMillis
@@ -91,17 +113,35 @@ pipeline {
                     steps {
                         sh '''rm -rf artifacts/leap42.3/
                               mkdir -p artifacts/leap42.3/
-                              rm -rf _topdir/SRPMS _topdir/RPMS
-                              make rpms
-                              ln _topdir/{RPMS/*,SRPMS}/* artifacts/leap42.3/
-                              createrepo artifacts/leap42.3/'''
+                              make srpm
+                              cd _topdir/SOURCES; sudo build \
+                                --repo http://download.opensuse.org/update/leap/42.3/oss/ \
+                                --repo http://download.opensuse.org/distribution/leap/42.3/repo/oss/suse/ \
+                                --dist sl42.3'''
                     }
                     post {
-                        always {
+                        success {
+                            sh '''(cd /var/tmp/build-root/home/abuild/rpmbuild/ &&
+                                   cp {RPMS/*,SRPMS}/* $OLDPWD/artifacts/leap42.3/)
+                                  createrepo artifacts/leap42.3/'''
+                        }
+                        unsuccessful {
+                            sh '''(cd /var/tmp/build-root/home/abuild/rpmbuild/BUILD &&
+                                   find . -name configure -printf %h\\\\n | \
+                                   while read dir; do
+                                       if [ ! -f $dir/config.log ]; then
+                                           continue
+                                       fi
+                                       tdir="$OLDPWD/artifacts/leap42.3/autoconf-logs/$dir"
+                                       mkdir -p $tdir
+                                       cp -a $dir/config.log $tdir/
+                                   done)'''
+                        }
+                        cleanup {
                             archiveArtifacts artifacts: 'artifacts/leap42.3/**'
                         }
                     }
-                }
+                } // stage Build on Leap 42.3
             }
         }
     }

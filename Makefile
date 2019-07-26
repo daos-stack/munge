@@ -6,45 +6,34 @@ URL_BASE := https://download.opensuse.org/source/distribution/leap/15.1
 URL_BASE := $(URL_BASE)/repo/oss/src
 SOURCE   = $(URL_BASE)/$(NAME)-$(VERSION).src.$(SRC_EXT)
 
+SPEC := _topdir/SOURCES/munge.spec
+
 RPMS := _topdir/RPMS/x86_64/lib$(NAME)2-$(VERSION).x86_64.rpm
 RPMS += _topdir/RPMS/x86_64/$(NAME)-devel-$(VERSION).x86_64.rpm
 RPMS += _topdir/RPMS/x86_64/$(NAME)-$(VERSION).x86_64.rpm
+SRPM := _topdir/SRPMS/$(NAME)-$(VERSION).src.$(SRC_EXT)
 
-TARBALL := _topdir/SOURCES/$(NAME)-$(TARBALL_VERSION).tar.gz
+SOURCES := _topdir/SOURCES/$(NAME)-$(TARBALL_VERSION).tar.gz
 
 COMMON_RPM_ARGS := --define "%_topdir $$PWD/_topdir"
-SRPM := _topdir/SOURCES/$(NAME)-$(VERSION).src.$(SRC_EXT)
+SRPM_IN := _topdir/SOURCES/$(NAME)-$(VERSION).src.$(SRC_EXT)
 
-$(SRPM): Makefile
+# Can not just CURL the file into the _topdir/SRPMS, the rpmbuild of the
+# binary packages replaces it, which makes it newer than the unpacked
+# sources.
+$(SRPM_IN): Makefile
 	rm -rf _topdir
 	mkdir -p _topdir/SOURCES
 	cd _topdir/SOURCES/; curl -f -L -O '$(SOURCE)'
 
-$(TARBALL): $(SRPM)
-	cd _topdir/SOURCES; rpm2cpio ../../$(SRPM) | cpio -iv
+$(SRPM): $(SPEC)
+	mkdir -p _topdir/SRPMS
+	ln -f $< $@
 
-TARGETS := $(RPMS) $(SRPM)
-all: $(TARGETS)
+$(SOURCES): $(SRPM_IN)
+	cd _topdir/SOURCES; rpm2cpio ../../$(SRPM_IN) | cpio -iv
 
-# see https://stackoverflow.com/questions/2973445/ for why we subst
-# # the "rpm" for "%" to effectively turn this into a multiple matching
-# # target pattern rule
-$(subst rpm,%,$(RPMS)): $(TARBALL)
-	rpmbuild $(COMMON_RPM_ARGS) -ba _topdir/SOURCES/munge.spec
+$(SPEC): $(SOURCES)
 
-srpm: $(SRPM)
+include Makefile_packaging.mk
 
-$(RPMS): Makefile
-
-rpms: $(RPMS)
-
-ls: $(TARGETS)
-	ls -ld $^
-
-show_rpms:
-	@echo $(RPMS)
-
-show_targets:
-	@echo $(TARGETS)
-
-.PHONY: srpm rpms ls show_targets

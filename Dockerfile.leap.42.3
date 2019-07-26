@@ -13,20 +13,29 @@ ARG UID=1000
 
 # Add build user (to keep rpmbuild happy)
 ENV USER build
-ENV PASSWD build
 RUN useradd -u $UID -ms /bin/bash $USER
 RUN groupadd -g $UID $USER
-RUN echo "$USER:$PASSWD" | chpasswd
 
 # Install basic tools
 RUN zypper --non-interactive update
-# basic building
-RUN zypper --non-interactive install make rpm-build curl createrepo git    \
-                                     lsb-release autoconf automake libtool \
-                                     ca-certificates-mozilla
 
-RUN zypper --non-interactive install gcc openssl-devel zlib-devel libbz2-devel
+# basic building
+ENV OPENSUSE_REPO="https://download.opensuse.org/repositories"
+ENV TOOLS_42_3A="openSUSE:Tools/openSUSE_42.3/openSUSE:Tools.repo"
+ENV TOOLS_42_3="${OPENSUSE_REPO}/$(ENV_TOOLS_42_3A)"
+
+RUN zypper --non-interactive ar ${ENV_TOOLS_42_3A}; \
+    zypper --non-interactive --gpg-auto-import-keys ref \
+      'openSUSE.org tools (openSUSE_42.3)'
+RUN zypper --non-interactive install autoconf automake build                 \
+                                     ca-certificates-mozilla curl createrepo \
+                                     git libtool lsb-release make            \
+                                     perl-libwww-perl perl-XML-Parser        \
+                                     rpm-build sudo
 
 # force an upgrade to get any newly built RPMs
 ARG CACHEBUST=1
 RUN zypper --non-interactive up
+
+# need to run the build command as root, as it needs to chroot
+RUN echo "build ALL=(ALL) NOPASSWD: /usr/bin/build" > /etc/sudoers.d/build

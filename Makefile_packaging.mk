@@ -17,9 +17,7 @@ SED_EXPR := 1p
 else
 SED_EXPR := 1s/$(DIST)//p
 endif
-ifeq ($(SPEC),)
 SPEC    := $(NAME).spec
-endif
 ifeq ($(VERSION),)
 VERSION := $(shell rpm $(COMMON_RPM_ARGS) --specfile --qf '%{version}\n' $(SPEC) | sed -n '1p')
 endif
@@ -28,9 +26,7 @@ DEB_VERS := $(subst rc,~rc,$(VERSION))
 DEB_RVERS := $(subst $(DOT),\$(DOT),$(DEB_VERS))
 DEB_BVERS := $(basename $(subst ~rc,$(DOT)rc,$(DEB_VERS)))
 RELEASE := $(shell rpm $(COMMON_RPM_ARGS) --specfile --qf '%{release}\n' $(SPEC) | sed -n '$(SED_EXPR)')
-ifeq ($(SRPM),)
-SRPM    := _topdir/SRPMS/$(NAME)-$(VERSION)-$(RELEASE)$(DIST).src.rpm
-endif
+SRPM    ?= _topdir/SRPMS/$(NAME)-$(VERSION)-$(RELEASE)$(DIST).src.rpm
 ifeq ($(RPMS),)
 RPMS    := $(addsuffix .rpm,$(addprefix _topdir/RPMS/x86_64/,$(shell rpm --specfile $(SPEC))))
 endif
@@ -69,8 +65,6 @@ _topdir/SOURCES/%: % | _topdir/SOURCES/
 	rm -f $@
 	ln $< $@
 
-ifeq ($(SOURCE_URL),)
-
 $(NAME)-$(VERSION).tar.$(SRC_EXT).asc:
 	curl -f -L -O '$(SOURCE).asc'
 
@@ -82,7 +76,6 @@ v$(VERSION).tar.$(SRC_EXT):
 
 $(VERSION).tar.$(SRC_EXT):
 	curl -f -L -O '$(SOURCE)'
-endif
 
 $(DEB_TOP)/%: % | $(DEB_TOP)/
 
@@ -233,6 +226,9 @@ show_rpms:
 
 show_source:
 	@echo $(SOURCE)
+	@echo -$(NAME)-$(VERSION).tar.$(SRC_EXT)-
+
+source: $(notdir $(SOURCE))
 
 show_sources:
 	@echo $(SOURCES)
@@ -241,4 +237,5 @@ show_targets:
 	@echo $(TARGETS)
 
 .PHONY: srpm rpms debs ls mockbuild rpmlint FORCE show_version show_tag \
-     show_release show_rpms show_source show_sources show_targets check-env
+     show_release show_rpms source show_source show_sources show_targets \
+     check-env

@@ -66,7 +66,7 @@ pipeline {
                     steps {
                         sh '''rm -rf artifacts/sles12.3/
                               mkdir -p artifacts/sles12.3/
-                              make srpm
+                              make source
                               cd _topdir/SOURCES; sudo build \
                                 --repo http://cobbler/cobbler/ks_mirror/SLES-12.3-x86_64/suse \
                                 --repo http://cobbler/cobbler/repo_mirror/sdk-sles12.3-x86_64 \
@@ -109,7 +109,7 @@ pipeline {
                     steps {
                         sh '''rm -rf artifacts/leap42.3/
                               mkdir -p artifacts/leap42.3/
-                              make srpm
+                              make source
                               cd _topdir/SOURCES; sudo build \
                                 --repo http://download.opensuse.org/update/leap/42.3/oss/ \
                                 --repo http://download.opensuse.org/distribution/leap/42.3/repo/oss/suse/ \

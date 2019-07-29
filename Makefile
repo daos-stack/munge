@@ -15,7 +15,6 @@ SRPM := _topdir/SRPMS/$(NAME)-$(VERSION).src.$(SRC_EXT)
 
 SOURCES := _topdir/SOURCES/$(NAME)-$(TARBALL_VERSION).tar.gz
 
-COMMON_RPM_ARGS := --define "%_topdir $$PWD/_topdir"
 SRPM_IN := _topdir/SOURCES/$(NAME)-$(VERSION).src.$(SRC_EXT)
 
 # Can not just CURL the file into the _topdir/SRPMS, the rpmbuild of the

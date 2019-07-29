@@ -60,9 +60,7 @@ pipeline {
                             filename 'Dockerfile.sles.12.3'
                             label 'docker_runner'
                             args '--privileged=true'
-                            additionalBuildArgs '--build-arg UID=$(id -u)' +
-                                                ' --build-arg CACHEBUST=' +
-                                                currentBuild.startTimeInMillis
+                            additionalBuildArgs '--build-arg UID=$(id -u)'
                         }
                     }
                     steps {
@@ -105,9 +103,7 @@ pipeline {
                             filename 'Dockerfile.leap.42.3'
                             label 'docker_runner'
                             args '--privileged=true'
-                            additionalBuildArgs '--build-arg UID=$(id -u)' +
-                                                ' --build-arg CACHEBUST=' +
-                                                currentBuild.startTimeInMillis
+                            additionalBuildArgs '--build-arg UID=$(id -u)'
                         }
                     }
                     steps {

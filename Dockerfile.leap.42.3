@@ -33,9 +33,5 @@ RUN zypper --non-interactive install autoconf automake build                 \
                                      perl-libwww-perl perl-XML-Parser        \
                                      rpm-build sudo
 
-# force an upgrade to get any newly built RPMs
-ARG CACHEBUST=1
-RUN zypper --non-interactive up
-
 # need to run the build command as root, as it needs to chroot
 RUN echo "build ALL=(ALL) NOPASSWD: /usr/bin/build" > /etc/sudoers.d/build

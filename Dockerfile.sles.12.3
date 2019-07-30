@@ -1,0 +1,38 @@
+#
+# Copyright 2019, Intel Corporation
+#
+# 'recipe' for Docker to build an RPM
+#
+
+# Pull base image
+FROM suse/sles:12.3
+MAINTAINER daos-stack <daos@daos.groups.io>
+
+# use same UID as host and default value of 1000 if not specified
+ARG UID=1000
+
+# Add build user (to keep rpmbuild happy)
+ENV USER build
+ENV PASSWD build
+RUN useradd -u $UID -ms /bin/bash $USER
+RUN groupadd -g $UID $USER
+
+# Install basic tools
+RUN zypper --non-interactive update
+# basic building
+ENV OPENSUSE_REPO="https://download.opensuse.org/repositories"
+ENV TOOLS_12_3A="openSUSE:Tools/SLE_12_SP3/openSUSE:Tools.repo"
+ENV TOOLS_12_3="${OPENSUSE_REPO}/$(ENV_TOOLS_12_3A)"
+
+RUN zypper --non-interactive ar ${ENV_TOOLS_12_3}; \
+    zypper --non-interactive --gpg-auto-import-keys ref \
+      'openSUSE.org tools (SLE_12_SP3)'
+RUN zypper --non-interactive install autoconf automake build                 \
+                                     ca-certificates-mozilla curl createrepo \
+                                     git libtool lsb-release make            \
+                                     perl-libwww-perl perl-XML-Parser        \
+                                     rpm-build sudo
+
+# need to run the build command as root, as it needs to chroot
+RUN echo "#includedir /etc/sudoers.d" >> /etc/sudoers; \
+    echo "build ALL=(ALL) NOPASSWD: /usr/bin/build" > /etc/sudoers.d/build

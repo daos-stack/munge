@@ -60,19 +60,15 @@ pipeline {
                             filename 'Dockerfile.sles.12.3'
                             label 'docker_runner'
                             args '--privileged=true'
-                            additionalBuildArgs '--build-arg UID=$(id -u)'
+                            additionalBuildArgs '--build-arg UID=$(id -u)' +
+                                                ' --build-arg CACHEBUST=' +
+                                                currentBuild.startTimeInMillis
                         }
                     }
                     steps {
                         sh '''rm -rf artifacts/sles12.3/
                               mkdir -p artifacts/sles12.3/
-                              make source
-                              sudo build \
-                                --repo http://cobbler/cobbler/ks_mirror/SLES-12.3-x86_64/suse \
-                                --repo http://cobbler/cobbler/repo_mirror/sdk-sles12.3-x86_64 \
-                                --repo http://cobbler/cobbler/repo_mirror/updates-sles12.3-x86_64 \
-                                --repo http://cobbler/cobbler/repo_mirror/sdkupdate-sles12.3-x86_64 \
-                                --dist sles12.3'''
+                              make mockbuild'''
                     }
                     post {
                         success {
@@ -103,17 +99,15 @@ pipeline {
                             filename 'Dockerfile.leap.42.3'
                             label 'docker_runner'
                             args '--privileged=true'
-                            additionalBuildArgs '--build-arg UID=$(id -u)'
+                            additionalBuildArgs '--build-arg UID=$(id -u)' +
+                                                ' --build-arg CACHEBUST=' +
+                                                currentBuild.startTimeInMillis
                         }
                     }
                     steps {
                         sh '''rm -rf artifacts/leap42.3/
                               mkdir -p artifacts/leap42.3/
-                              make source
-                              sudo build \
-                                --repo http://download.opensuse.org/update/leap/42.3/oss/ \
-                                --repo http://download.opensuse.org/distribution/leap/42.3/repo/oss/suse/ \
-                                --dist sl42.3'''
+                              make mockbuild'''
                     }
                     post {
                         success {

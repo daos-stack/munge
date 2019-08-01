@@ -78,19 +78,19 @@ _topdir/SOURCES/%: % | _topdir/SOURCES/
 	ln $< $@
 
 $(NAME)-$(VERSION).tar.$(SRC_EXT).asc: $(NAME).spec Makefile
-	rm -f $(NAME)-$(VERSION).tar.{gz,bz*,xz}.asc
+	rm -f ./$(NAME)-*.tar.{gz,bz*,xz}.asc
 	curl -f -L -O '$(SOURCE).asc'
 
 $(NAME)-$(VERSION).tar.$(SRC_EXT): $(NAME).spec Makefile
-	rm -f $(NAME)-$(VERSION).tar.{gz,bz*,xz}
+	rm -f ./$(NAME)-*.tar.{gz,bz*,xz}
 	curl -f -L -O '$(SOURCE)'
 
 v$(VERSION).tar.$(SRC_EXT): $(NAME).spec Makefile
-	rm -f v$(VERSION).tar.{gz,bz*,xz}
+	rm -f ./v*.tar.{gz,bz*,xz}
 	curl -f -L -O '$(SOURCE)'
 
 $(VERSION).tar.$(SRC_EXT): $(NAME).spec Makefile
-	rm -f $(VERSION).tar.{gz,bz*,xz}
+	rm -f ./*.tar.{gz,bz*,xz}
 	curl -f -L -O '$(SOURCE)'
 
 $(DEB_TOP)/%: % | $(DEB_TOP)/
@@ -209,11 +209,11 @@ ls: $(TARGETS)
 	ls -ld $^
 
 ifneq ($(ID_LIKE),suse)
-mockbuild: $(SRPM)  Makefile
+chrootbuild: $(SRPM)  Makefile
 
 	mock $(MOCK_OPTIONS) $(RPM_BUILD_OPTIONS) $<
 else
-mockbuild: Makefile $(SOURCES)
+chrootbuild: Makefile $(SOURCES)
 	sudo build --repo zypp:// --dist $(DISTRO_ID) $(RPM_BUILD_OPTIONS)
 endif
 
@@ -246,6 +246,6 @@ show_sources:
 show_targets:
 	@echo $(TARGETS)
 
-.PHONY: srpm rpms debs ls mockbuild rpmlint FORCE \
+.PHONY: srpm rpms debs ls chrootbuild rpmlint FORCE \
         show_version show_release show_rpms show_source show_sources \
         show_targets check-env

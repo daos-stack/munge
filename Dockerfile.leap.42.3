@@ -36,13 +36,12 @@ RUN zypper --non-interactive install autoconf automake build                 \
 RUN echo "build ALL=(ALL) NOPASSWD: /usr/bin/build" > /etc/sudoers.d/build
 
 # Suse build utility can not handle spaces in the repo aliases.
-ENV OPENSUSE_UPD="http://download.opensuse.org/update"
-ENV OPENSUSE_DIST="http://download.opensuse.org/distribution"
 RUN zypper --non-interactive nr 'NON OSS' NON_OSS; \
     zypper --non-interactive nr 'NON OSS Update' NON_OSS_Update; \
     zypper --non-interactive nr 'OSS Update' OSS_Update
 
 # Suse build utility needs this refresh.
+# And the zypper lr report is handy to have.
 ARG CACHEBUST=1
 RUN zypper --non-interactive refresh; zypper lr --details
 

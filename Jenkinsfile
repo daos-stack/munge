@@ -68,7 +68,7 @@ pipeline {
                     steps {
                         sh '''rm -rf artifacts/sles12.3/
                               mkdir -p artifacts/sles12.3/
-                              make mockbuild'''
+                              make chrootbuild'''
                     }
                     post {
                         success {
@@ -107,7 +107,7 @@ pipeline {
                     steps {
                         sh '''rm -rf artifacts/leap42.3/
                               mkdir -p artifacts/leap42.3/
-                              make mockbuild'''
+                              make chrootbuild'''
                     }
                     post {
                         success {

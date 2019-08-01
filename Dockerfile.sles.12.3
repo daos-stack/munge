@@ -13,7 +13,6 @@ ARG UID=1000
 
 # Add build user (to keep rpmbuild happy)
 ENV USER build
-ENV PASSWD build
 RUN useradd -u $UID -ms /bin/bash $USER
 RUN groupadd -g $UID $USER
 
@@ -37,6 +36,7 @@ RUN echo "#includedir /etc/sudoers.d" >> /etc/sudoers; \
     echo "build ALL=(ALL) NOPASSWD: /usr/bin/build" > /etc/sudoers.d/build
 
 # Suse build utility needs this refresh.
+# And the zypper lr report is handy to have.
 ARG CACHEBUST=1
 RUN zypper --non-interactive refresh; zypper lr --details
 

@@ -9,7 +9,23 @@
 ifeq ($(DEB_NAME),)
 DEB_NAME := $(NAME)
 endif
+
+# Find out what we are
 ID_LIKE := $(shell . /etc/os-release; echo $$ID_LIKE)
+# Of course that does not work for SLES-12
+ID := $(shell . /etc/os-release; echo $$ID)
+VERSION_ID := $(shell . /etc/os-release; echo $$VERSION_ID)
+ifeq ($(findstring opensuse,$(ID)),opensuse)
+ID_LIKE := suse
+DISTRO_ID := sl$(VERSION_ID)
+endif
+ifeq ($(ID),sles)
+# SLES-12 or 15 detected.
+ID_LIKE := suse
+DISTRO_ID := sle$(VERSION_ID)
+endif
+
+
 COMMON_RPM_ARGS := --define "%_topdir $$PWD/_topdir"
 DIST    := $(shell rpm $(COMMON_RPM_ARGS) --eval %{?dist})
 ifeq ($(DIST),)
@@ -26,16 +42,12 @@ DEB_VERS := $(subst rc,~rc,$(VERSION))
 DEB_RVERS := $(subst $(DOT),\$(DOT),$(DEB_VERS))
 DEB_BVERS := $(basename $(subst ~rc,$(DOT)rc,$(DEB_VERS)))
 RELEASE := $(shell rpm $(COMMON_RPM_ARGS) --specfile --qf '%{release}\n' $(SPEC) | sed -n '$(SED_EXPR)')
-SRPM    ?= _topdir/SRPMS/$(NAME)-$(VERSION)-$(RELEASE)$(DIST).src.rpm
-ifeq ($(RPMS),)
+SRPM    := _topdir/SRPMS/$(NAME)-$(VERSION)-$(RELEASE)$(DIST).src.rpm
 RPMS    := $(addsuffix .rpm,$(addprefix _topdir/RPMS/x86_64/,$(shell rpm --specfile $(SPEC))))
-endif
 DEB_TOP := _topdir/BUILD
 DEB_BUILD := $(DEB_TOP)/$(NAME)-$(DEB_VERS)
 DEB_TARBASE := $(DEB_TOP)/$(DEB_NAME)_$(DEB_VERS)
-ifeq ($(SOURCES),)
 SOURCES := $(addprefix _topdir/SOURCES/,$(notdir $(SOURCE)) $(PATCHES))
-endif
 ifeq ($(ID_LIKE),debian)
 DEBS    := $(addsuffix _$(DEB_VERS)-1_amd64.deb,$(shell sed -n '/-udeb/b; s,^Package:[[:blank:]],$(DEB_TOP)/,p' debian/control))
 CLEAN_TARBALS := $(shell rm -f *.tar.$(SRC_EXT))
@@ -65,16 +77,20 @@ _topdir/SOURCES/%: % | _topdir/SOURCES/
 	rm -f $@
 	ln $< $@
 
-$(NAME)-$(VERSION).tar.$(SRC_EXT).asc:
+$(NAME)-$(VERSION).tar.$(SRC_EXT).asc: $(NAME).spec Makefile
+	rm -f ./$(NAME)-*.tar.{gz,bz*,xz}.asc
 	curl -f -L -O '$(SOURCE).asc'
 
-$(NAME)-$(VERSION).tar.$(SRC_EXT):
+$(NAME)-$(VERSION).tar.$(SRC_EXT): $(NAME).spec Makefile
+	rm -f ./$(NAME)-*.tar.{gz,bz*,xz}
 	curl -f -L -O '$(SOURCE)'
 
-v$(VERSION).tar.$(SRC_EXT):
+v$(VERSION).tar.$(SRC_EXT): $(NAME).spec Makefile
+	rm -f ./v*.tar.{gz,bz*,xz}
 	curl -f -L -O '$(SOURCE)'
 
-$(VERSION).tar.$(SRC_EXT):
+$(VERSION).tar.$(SRC_EXT): $(NAME).spec Makefile
+	rm -f ./*.tar.{gz,bz*,xz}
 	curl -f -L -O '$(SOURCE)'
 
 $(DEB_TOP)/%: % | $(DEB_TOP)/
@@ -176,14 +192,12 @@ $(subst deb,%,$(DEBS)): $(DEB_BUILD).tar.$(SRC_EXT) \
 	for f in $(DEB_TOP)/*.deb; do \
 	  echo $$f; dpkg -c $$f; done
 
-ifneq ($(SRC_EXT),rpm)
 $(SRPM): $(SPEC) $(SOURCES)
-	rpmbuild -bs $(COMMON_RPM_ARGS) $(SPEC)
-endif
+	rpmbuild -bs $(COMMON_RPM_ARGS) $(RPM_BUILD_OPTIONS) $(SPEC)
 
 srpm: $(SRPM)
 
-$(RPMS): Makefile
+$(RPMS): $(SRPM) Makefile
 
 rpms: $(RPMS)
 
@@ -194,15 +208,17 @@ debs: $(DEBS)
 ls: $(TARGETS)
 	ls -ld $^
 
-mockbuild: $(SRPM) Makefile
-	mock $(MOCK_OPTIONS) $<
+ifneq ($(ID_LIKE),suse)
+chrootbuild: $(SRPM)  Makefile
+
+	mock $(MOCK_OPTIONS) $(RPM_BUILD_OPTIONS) $<
+else
+chrootbuild: Makefile $(SOURCES)
+	sudo build --repo zypp:// --dist $(DISTRO_ID) $(RPM_BUILD_OPTIONS)
+endif
 
 rpmlint: $(SPEC)
 	rpmlint $<
-
-# Debian wants a distclean target
-#distclean:
-#	@echo "distclean"
 
 check-env:
 ifndef DEBEMAIL
@@ -215,9 +231,6 @@ endif
 show_version:
 	@echo $(VERSION)
 
-show_tag:
-	@echo ${TAG}
-
 show_release:
 	@echo $(RELEASE)
 
@@ -226,9 +239,6 @@ show_rpms:
 
 show_source:
 	@echo $(SOURCE)
-	@echo -$(NAME)-$(VERSION).tar.$(SRC_EXT)-
-
-source: $(notdir $(SOURCE))
 
 show_sources:
 	@echo $(SOURCES)
@@ -236,6 +246,6 @@ show_sources:
 show_targets:
 	@echo $(TARGETS)
 
-.PHONY: srpm rpms debs ls mockbuild rpmlint FORCE show_version show_tag \
-     show_release show_rpms source show_source show_sources show_targets \
-     check-env
+.PHONY: srpm rpms debs ls chrootbuild rpmlint FORCE \
+        show_version show_release show_rpms show_source show_sources \
+        show_targets check-env

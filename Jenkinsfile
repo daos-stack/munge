@@ -74,7 +74,13 @@ pipeline {
                         success {
                             sh '''(cd /var/tmp/build-root/home/abuild/rpmbuild/ &&
                                    cp {RPMS/*,SRPMS}/* $OLDPWD/artifacts/sles12.3/)
-                                  createrepo artifacts/sles12.3/'''
+                                  createrepo artifacts/sles12.3/
+                                  '''
+                            publishToRepository product: 'slurm',
+                                                format: 'yum',
+                                                maturity: 'stable',
+                                                tech: 'sles12.3',
+                                                repo_dir: 'artifacts/sles12.3/'
                         }
                         unsuccessful {
                             sh '''(cd /var/tmp/build-root/home/abuild/rpmbuild/BUILD &&
@@ -114,6 +120,11 @@ pipeline {
                             sh '''(cd /var/tmp/build-root/home/abuild/rpmbuild/ &&
                                    cp {RPMS/*,SRPMS}/* $OLDPWD/artifacts/leap42.3/)
                                   createrepo artifacts/leap42.3/'''
+                            publishToRepository product: 'slurm',
+                                                format: 'yum',
+                                                maturity: 'stable',
+                                                tech: 'leap42.3',
+                                                repo_dir: 'artifacts/leap42.3/'
                         }
                         unsuccessful {
                             sh '''(cd /var/tmp/build-root/home/abuild/rpmbuild/BUILD &&

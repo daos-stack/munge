@@ -79,7 +79,7 @@ pipeline {
                             publishToRepository product: 'slurm',
                                                 format: 'yum',
                                                 maturity: 'stable',
-                                                tech: 'sles12.3',
+                                                tech: 'sles-12',
                                                 repo_dir: 'artifacts/sles12.3/'
                         }
                         unsuccessful {
@@ -123,7 +123,7 @@ pipeline {
                             publishToRepository product: 'slurm',
                                                 format: 'yum',
                                                 maturity: 'stable',
-                                                tech: 'leap42.3',
+                                                tech: 'leap-42',
                                                 repo_dir: 'artifacts/leap42.3/'
                         }
                         unsuccessful {

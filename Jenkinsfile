@@ -50,93 +50,155 @@ pipeline {
                 cancelPreviousBuilds()
             }
         }
-        stage('Build') {
+        stage('Lint') {
             parallel {
-                stage('Build on SLES 12.3') {
-                    when { beforeAgent true
-                           environment name: 'SLES12_3_DOCKER', value: 'true' }
+                stage('RPM Lint') {
                     agent {
                         dockerfile {
-                            filename 'Dockerfile.sles.12.3'
+                            filename 'packaging/Dockerfile.centos.7'
                             label 'docker_runner'
-                            args '--privileged=true'
-                            additionalBuildArgs '--build-arg UID=$(id -u)' +
-                                                ' --build-arg CACHEBUST=' +
-                                                currentBuild.startTimeInMillis
+                            args  '--group-add mock' +
+                                  ' --cap-add=SYS_ADMIN' +
+                                  ' --privileged=true'
+                            additionalBuildArgs  '--build-arg UID=$(id -u)'
                         }
                     }
                     steps {
-                        sh '''rm -rf artifacts/sles12.3/
+                        sh 'make rpmlint'
+                    }
+                }
+                stage('Check Packaging') {
+                    agent { label 'lightweight' }
+                    steps {
+                        checkoutScm url: 'https://github.com/daos-stack/packaging.git',
+                                    checkoutDir: 'packaging-module'
+                        catchError(stageResult: 'UNSTABLE', buildResult: 'SUCCESS') {
+                            sh '''make PACKAGING_CHECK_DIR=packaging-module \
+                                       packaging_check'''
+                        }
+                    }
+                    post {
+                        unsuccessful {
+                            emailext body: 'Packaging out of date for ' + jobName() + '.\n' +
+                                           "You should update it and submit your PR again.",
+                                     recipientProviders: [
+                                          [$class: 'DevelopersRecipientProvider'],
+                                          [$class: 'RequesterRecipientProvider']
+                                     ],
+                                     subject: 'Packaging is out of date for ' + jobName()
+                        }
+                    }
+                } //stage('Check Packaging')
+            } // parallel
+        } //stage('Lint')
+        stage('Build') {
+            parallel {
+                stage('Build on SLES 12.3') {
+                    when {
+                        beforeAgent true
+                        environment name: 'SLES12_3_DOCKER', value: 'true'
+                    }
+                    agent {
+                        dockerfile {
+                            filename 'packaging/Dockerfile.sles.12.3'
+                            label 'docker_runner'
+                            args '--privileged=true'
+                            additionalBuildArgs '--build-arg UID=$(id -u)' +
+                                                ' --build-arg JENKINS_URL=' +
+                                                env.JENKINS_URL
+                        }
+                    }
+                    steps {
+                        sh label: "Build package",
+                           script: '''rm -rf artifacts/sles12.3/
                               mkdir -p artifacts/sles12.3/
                               make chrootbuild'''
                     }
                     post {
                         success {
-                            sh '''(cd /var/tmp/build-root/home/abuild/rpmbuild/ &&
-                                   cp {RPMS/*,SRPMS}/* $OLDPWD/artifacts/sles12.3/)
-                                  createrepo artifacts/sles12.3/
-                                  '''
+                            sh label: "Collect artifacts",
+                               script: '''mockbase=/var/tmp/build-root/home/abuild
+                                  mockroot=$mockbase/rpmbuild
+                                  artdir=$PWD/artifacts/sles12.3
+                                  (cd $mockroot &&
+                                   cp {RPMS/*,SRPMS}/* $artdir)
+                                  createrepo $artdir/'''
                             publishToRepository product: 'slurm',
                                                 format: 'yum',
                                                 maturity: 'stable',
-                                                tech: 'sles12.3',
+                                                tech: 'sles-12',
                                                 repo_dir: 'artifacts/sles12.3/'
                         }
                         unsuccessful {
-                            sh '''(cd /var/tmp/build-root/home/abuild/rpmbuild/BUILD &&
+                            sh label: "Collect artifacts",
+                               script: '''mockbase=/var/tmp/build-root/home/abuild
+                                  mockroot=$mockbase/rpmbuild
+                                  artdir=$PWD/artifacts/sles12.3
+                                  (if cd $mockroot/BUILD; then
                                    find . -name configure -printf %h\\\\n | \
                                    while read dir; do
                                        if [ ! -f $dir/config.log ]; then
                                            continue
                                        fi
-                                       tdir="$OLDPWD/artifacts/sles12.3/autoconf-logs/$dir"
+                                           tdir="$artdir/autoconf-logs/$dir"
                                        mkdir -p $tdir
                                        cp -a $dir/config.log $tdir/
-                                   done)'''
+                                   done
+                               fi)'''
                         }
                         cleanup {
                             archiveArtifacts artifacts: 'artifacts/sles12.3/**'
                         }
                     }
-                }
+                } //stage('Build on SLES 12.3')
                 stage('Build on Leap 42.3') {
                     agent {
                         dockerfile {
-                            filename 'Dockerfile.leap.42.3'
+                            filename 'packaging/Dockerfile.leap.42.3'
                             label 'docker_runner'
                             args '--privileged=true'
                             additionalBuildArgs '--build-arg UID=$(id -u)' +
-                                                ' --build-arg CACHEBUST=' +
-                                                currentBuild.startTimeInMillis
+                                                ' --build-arg JENKINS_URL=' +
+                                                env.JENKINS_URL
                         }
                     }
                     steps {
-                        sh '''rm -rf artifacts/leap42.3/
+                        sh label: "Build package",
+                        script: '''rm -rf artifacts/leap42.3/
                               mkdir -p artifacts/leap42.3/
                               make chrootbuild'''
                     }
                     post {
                         success {
-                            sh '''(cd /var/tmp/build-root/home/abuild/rpmbuild/ &&
-                                   cp {RPMS/*,SRPMS}/* $OLDPWD/artifacts/leap42.3/)
-                                  createrepo artifacts/leap42.3/'''
+                            sh label: "Collect artifacts",
+                               script: '''mockbase=/var/tmp/build-root/home/abuild
+                                  mockroot=$mockbase/rpmbuild
+                                  artdir=$PWD/artifacts/leap42.3
+                                  (cd $mockroot &&
+                                   cp {RPMS/*,SRPMS}/* $artdir)
+                                  createrepo $artdir/'''
                             publishToRepository product: 'slurm',
                                                 format: 'yum',
                                                 maturity: 'stable',
-                                                tech: 'leap42.3',
+                                                tech: 'leap-42',
                                                 repo_dir: 'artifacts/leap42.3/'
                         }
                         unsuccessful {
-                            sh '''(cd /var/tmp/build-root/home/abuild/rpmbuild/BUILD &&
+                            sh label: "Collect artifacts",
+                               script: '''mockbase=/var/tmp/build-root/home/abuild
+                                  mockroot=$mockbase/rpmbuild
+                                  artdir=$PWD/artifacts/leap42.3
+                                  (if cd $mockroot/BUILD; then
                                    find . -name configure -printf %h\\\\n | \
                                    while read dir; do
                                        if [ ! -f $dir/config.log ]; then
                                            continue
                                        fi
-                                       tdir="$OLDPWD/artifacts/leap42.3/autoconf-logs/$dir"
+                                       tdir="$artdir/autoconf-logs/$dir"
                                        mkdir -p $tdir
                                        cp -a $dir/config.log $tdir/
-                                   done)'''
+                                   done
+                                   fi)'''
                         }
                         cleanup {
                             archiveArtifacts artifacts: 'artifacts/leap42.3/**'
@@ -144,6 +206,6 @@ pipeline {
                     }
                 } // stage Build on Leap 42.3
             }
-        }
-    }
-}
+        } //stage('Build')
+    } // stages
+} // pipeline

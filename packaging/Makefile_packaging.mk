@@ -1,15 +1,16 @@
 # Common Makefile for including
 # Needs the following variables set at a minium:
 # NAME :=
-# DEB_NAME :=
 # SRC_EXT :=
 # SOURCE =
-# ID_LIKE := $(shell . /etc/os-release; echo $$ID_LIKE)
 
 ifeq ($(DEB_NAME),)
 DEB_NAME := $(NAME)
 endif
 
+CALLING_MAKEFILE := $(word 1, $(MAKEFILE_LIST))
+
+RPM_BUILD_OPTIONS += $(EXTERNAL_RPM_BUILD_OPTIONS)
 # Find out what we are
 ID_LIKE := $(shell . /etc/os-release; echo $$ID_LIKE)
 # Of course that does not work for SLES-12
@@ -25,7 +26,8 @@ ID_LIKE := suse
 DISTRO_ID := sle$(VERSION_ID)
 endif
 
-
+BUILD_OS ?= leap.42.3
+PACKAGING_CHECK_DIR ?= ../packaging
 COMMON_RPM_ARGS := --define "%_topdir $$PWD/_topdir"
 DIST    := $(shell rpm $(COMMON_RPM_ARGS) --eval %{?dist})
 ifeq ($(DIST),)
@@ -34,9 +36,7 @@ else
 SED_EXPR := 1s/$(DIST)//p
 endif
 SPEC    := $(NAME).spec
-ifeq ($(VERSION),)
 VERSION := $(shell rpm $(COMMON_RPM_ARGS) --specfile --qf '%{version}\n' $(SPEC) | sed -n '1p')
-endif
 DOT     := .
 DEB_VERS := $(subst rc,~rc,$(VERSION))
 DEB_RVERS := $(subst $(DOT),\$(DOT),$(DEB_VERS))
@@ -50,7 +50,6 @@ DEB_TARBASE := $(DEB_TOP)/$(DEB_NAME)_$(DEB_VERS)
 SOURCES := $(addprefix _topdir/SOURCES/,$(notdir $(SOURCE)) $(PATCHES))
 ifeq ($(ID_LIKE),debian)
 DEBS    := $(addsuffix _$(DEB_VERS)-1_amd64.deb,$(shell sed -n '/-udeb/b; s,^Package:[[:blank:]],$(DEB_TOP)/,p' debian/control))
-CLEAN_TARBALS := $(shell rm -f *.tar.$(SRC_EXT))
 #Ubuntu Containers do not set a UTF-8 environment by default.
 ifndef LANG
 export LANG = C.UTF-8
@@ -60,6 +59,7 @@ export LC_ALL = C.UTF-8
 endif
 TARGETS := $(DEBS)
 else
+# CentOS/Suse packages that want a locale set need this.
 ifndef LANG
 export LANG = en_US.utf8
 endif
@@ -68,28 +68,39 @@ export LC_ALL = en_US.utf8
 endif
 TARGETS := $(RPMS) $(SRPM)
 endif
+
 all: $(TARGETS)
 
 %/:
 	mkdir -p $@
 
+%.gz: %
+	rm -f $@
+	gzip $<
+
 _topdir/SOURCES/%: % | _topdir/SOURCES/
 	rm -f $@
 	ln $< $@
 
-$(NAME)-$(VERSION).tar.$(SRC_EXT).asc: $(NAME).spec Makefile
+# At least one spec file, SLURM (sles), has a different version for the
+# download file than the version in the spec file.
+ifeq ($(DL_VERSION),)
+DL_VERSION = $(VERSION)
+endif
+
+$(NAME)-$(DL_VERSION).tar.$(SRC_EXT).asc: $(NAME).spec $(CALLING_MAKEFILE)
 	rm -f ./$(NAME)-*.tar.{gz,bz*,xz}.asc
 	curl -f -L -O '$(SOURCE).asc'
 
-$(NAME)-$(VERSION).tar.$(SRC_EXT): $(NAME).spec Makefile
+$(NAME)-$(DL_VERSION).tar.$(SRC_EXT): $(NAME).spec $(CALLING_MAKEFILE)
 	rm -f ./$(NAME)-*.tar.{gz,bz*,xz}
 	curl -f -L -O '$(SOURCE)'
 
-v$(VERSION).tar.$(SRC_EXT): $(NAME).spec Makefile
+v$(DL_VERSION).tar.$(SRC_EXT): $(NAME).spec $(CALLING_MAKEFILE)
 	rm -f ./v*.tar.{gz,bz*,xz}
 	curl -f -L -O '$(SOURCE)'
 
-$(VERSION).tar.$(SRC_EXT): $(NAME).spec Makefile
+$(DL_VERSION).tar.$(SRC_EXT): $(NAME).spec $(CALLING_MAKEFILE)
 	rm -f ./*.tar.{gz,bz*,xz}
 	curl -f -L -O '$(SOURCE)'
 
@@ -197,28 +208,103 @@ $(SRPM): $(SPEC) $(SOURCES)
 
 srpm: $(SRPM)
 
-$(RPMS): $(SRPM) Makefile
+$(RPMS): $(SRPM) $(CALLING_MAKEFILE)
 
 rpms: $(RPMS)
 
-$(DEBS): Makefile
+$(DEBS): $(CALLING_MAKEFILE)
 
 debs: $(DEBS)
 
 ls: $(TARGETS)
 	ls -ld $^
 
-ifneq ($(ID_LIKE),suse)
-chrootbuild: $(SRPM)  Makefile
-
+ifeq ($(ID_LIKE),rhel fedora)
+chrootbuild: $(SRPM) $(CALLING_MAKEFILE)
+	if [ -w /etc/mock/default.cfg ]; then                                    \
+	    echo -e "config_opts['yum.conf'] += \"\"\"\n" >> /etc/mock/default.cfg;  \
+	    for repo in $(ADD_REPOS); do                                             \
+	        if [[ $$repo = *@* ]]; then                                          \
+	            branch="$${repo#*@}";                                            \
+	            repo="$${repo%@*}";                                              \
+	        else                                                                 \
+	            branch="master";                                                 \
+	        fi;                                                                  \
+	        echo -e "[$$repo:$$branch:lastSuccessful]\n\
+name=$$repo:$$branch:lastSuccessful\n\
+baseurl=$${JENKINS_URL}job/daos-stack/job/$$repo/job/$$branch/lastSuccessfulBuild/artifact/artifacts/centos7/\n\
+enabled=1\n\
+gpgcheck = False\n" >> /etc/mock/default.cfg;                                        \
+	    done;                                                                    \
+	    echo "\"\"\"" >> /etc/mock/default.cfg;                                  \
+	else                                                                         \
+	    echo "Unable to update /etc/mock/default.cfg.";                          \
+            echo "You need to make sure it has the needed repos in it yourself.";    \
+	fi
 	mock $(MOCK_OPTIONS) $(RPM_BUILD_OPTIONS) $<
 else
-chrootbuild: Makefile $(SOURCES)
-	sudo build --repo zypp:// --dist $(DISTRO_ID) $(RPM_BUILD_OPTIONS)
+sle12_REPOS += --repo https://download.opensuse.org/repositories/science:/HPC/openSUSE_Leap_42.3/     \
+	       --repo http://cobbler/cobbler/repo_mirror/sdkupdate-sles12.3-x86_64/                   \
+	       --repo http://cobbler/cobbler/repo_mirror/sdk-sles12.3-x86_64                          \
+	       --repo http://download.opensuse.org/repositories/openSUSE:/Backports:/SLE-12/standard/ \
+	       --repo http://cobbler/cobbler/repo_mirror/updates-sles12.3-x86_64                      \
+	       --repo http://cobbler/cobbler/pub/SLES-12.3-x86_64/
+
+sl42_REPOS += --repo https://download.opensuse.org/repositories/science:/HPC/openSUSE_Leap_42.3 \
+	      --repo http://download.opensuse.org/update/leap/42.3/oss/                         \
+	      --repo http://download.opensuse.org/distribution/leap/42.3/repo/oss/suse/
+
+sl15_REPOS += --repo http://download.opensuse.org/update/leap/15.1/oss/            \
+	      --repo http://download.opensuse.org/distribution/leap/15.1/repo/oss/
+
+chrootbuild: $(SRPM) $(CALLING_MAKEFILE)
+	add_repos="";                                                       \
+	for repo in $(ADD_REPOS); do                                        \
+	    if [[ $$repo = *@* ]]; then                                     \
+	        branch="$${repo#*@}";                                       \
+	        repo="$${repo%@*}";                                         \
+	    else                                                            \
+	        branch="master";                                            \
+	    fi;                                                             \
+	    case $(DISTRO_ID) in                                            \
+	        sle12.3) distro="sles12.3";                                 \
+	        ;;                                                          \
+	        sl42.3) distro="leap42.3";                                  \
+	        ;;                                                          \
+	        sl15.1) distro="leap15.1";                                  \
+	        ;;                                                          \
+	    esac;                                                           \
+	    baseurl=$${JENKINS_URL}job/daos-stack/job/$$repo/job/$$branch/; \
+	    baseurl+=lastSuccessfulBuild/artifact/artifacts/$$distro/;      \
+            add_repos+=" --repo $$baseurl";                                 \
+        done;                                                               \
+	curl -O http://download.opensuse.org/repositories/science:/HPC/openSUSE_Leap_42.3/repodata/repomd.xml.key; \
+	sudo rpm --import repomd.xml.key;                                   \
+	sudo build $(BUILD_OPTIONS) $$add_repos                             \
+	     $($(basename $(DISTRO_ID))_REPOS)                              \
+	     --dist $(DISTRO_ID) $(RPM_BUILD_OPTIONS) $(SRPM)
 endif
+
+docker_chrootbuild:
+	docker build --build-arg UID=$$(id -u) -t $(BUILD_OS)-chrootbuild \
+	             -f packaging/Dockerfile.$(BUILD_OS) .
+	docker run --privileged=true -w $$PWD -v=$$PWD:$$PWD              \
+	           -it $(BUILD_OS)-chrootbuild bash -c "make chrootbuild"
 
 rpmlint: $(SPEC)
 	rpmlint $<
+
+packaging_check:
+	diff --exclude \*.sw?                       \
+	     --exclude debian                       \
+	     --exclude .git                         \
+	     --exclude Jenkinsfile                  \
+	     --exclude libfabric.spec               \
+	     --exclude Makefile                     \
+	     --exclude README.md                    \
+	     --exclude _topdir                      \
+	     --exclude \*.tar.\*                    \
+	     -bur $(PACKAGING_CHECK_DIR)/ packaging/
 
 check-env:
 ifndef DEBEMAIL
@@ -245,6 +331,12 @@ show_sources:
 
 show_targets:
 	@echo $(TARGETS)
+
+show_makefiles:
+	@echo $(MAKEFILE_LIST)
+
+show_calling_makefile:
+	@echo $(CALLING_MAKEFILE)
 
 .PHONY: srpm rpms debs ls chrootbuild rpmlint FORCE \
         show_version show_release show_rpms show_source show_sources \

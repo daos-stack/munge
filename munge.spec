@@ -60,9 +60,6 @@ BuildRequires:  systemd
 BuildRequires:  systemd-rpm-macros
 %{?systemd_requires}
 %endif
-%if 0%{?suse_version} < 1310
-%{!?_tmpfilesdir:%global _tmpfilesdir /usr/lib/tmpfiles.d}
-%endif
 BuildRoot:      %{_tmppath}/%{name}-%{version}-build
 
 %description
@@ -78,7 +75,9 @@ reserved ports, or platform-specific methods.
 %package -n lib%{name}%{lversion}
 Summary:        Libraries for applications using MUNGE
 Group:          System/Libraries
+%if (0%{?suse_version} >= 1315)
 Recommends:     munge
+%endif
 
 %description -n lib%{name}%{lversion}
 A shared library for applications using the MUNGE authentication service.
@@ -109,23 +108,12 @@ make %{?_smp_mflags}
 %{__cp} -p %{S:2} %{buildroot}%{_fillupdir}/sysconfig.munge
 %{__rm} -f %{buildroot}%{_sysconfdir}/sysconfig/munge
 
-# We don't want systemd file on SLE 11
-%if 0%{!?have_systemd:1}
-   test -d %{buildroot}%{_prefix}/lib/systemd && \
-      rm -rf %{buildroot}%{_prefix}/lib/systemd
-   test -f %{buildroot}/lib/systemd/system/munge.service && \
-      rm -f %{buildroot}/lib/systemd/system/munge.service
-   rm -f %{buildroot}/%{_tmpfilesdir}/munge.conf
-   sed -i 's/USER="munge"/USER="%munge_u"/g' %{buildroot}/%{_initrddir}/%{name}
-   %{__ln_s} -f %{_initrddir}/%{name} %{buildroot}%{_sbindir}/rc%{name}
-%else
-  sed -i 's/User=munge/User=%munge_u/g' %{buildroot}%{_unitdir}/munge.service
-  sed -i 's/Group=munge/Group=%munge_g/g' %{buildroot}%{_unitdir}/munge.service
-  sed -i 's/munge \+munge/%munge_u %munge_g/g' %{buildroot}%{_tmpfilesdir}/munge.conf
-  rm -f %{buildroot}%{_initddir}/munge
-  rmdir %{buildroot}%{_localstatedir}/run/munge
-  ln -s %{_sbindir}/service %{buildroot}%{_sbindir}/rc%{name}
-%endif
+sed -i 's/User=munge/User=%munge_u/g' %{buildroot}%{_unitdir}/munge.service
+sed -i 's/Group=munge/Group=%munge_g/g' %{buildroot}%{_unitdir}/munge.service
+sed -i 's/munge \+munge/%munge_u %munge_g/g' %{buildroot}%{_tmpfilesdir}/munge.conf
+rm -f %{buildroot}%{_initddir}/munge
+rmdir %{buildroot}%{_localstatedir}/run/munge
+ln -s %{_sbindir}/service %{buildroot}%{_sbindir}/rc%{name}
 
 %post -n lib%{name}%{lversion} -p /sbin/ldconfig
 
